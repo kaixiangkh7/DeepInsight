@@ -1,12 +1,12 @@
 import React, { useState, useRef } from 'react';
-import FileUploader from './components/FileUploader';
 import Dashboard from './components/Dashboard';
 import Chat from './components/Chat';
 import ComparisonView from './components/ComparisonView';
 import SourceSidebar from './components/SourceSidebar';
+import LandingPage from './components/LandingPage';
 import { AnalysisResult, SourceViewData } from './types';
 import { analyzeFinancialReport, initializeAgentSwarm, removeAgent } from './services/geminiService';
-import { LayoutDashboard, MessageSquareText, ShieldCheck, Columns, Loader2, Plus, FileUp, Sparkles, BrainCircuit } from 'lucide-react';
+import { LayoutDashboard, MessageSquareText, ShieldCheck, Columns, Loader2, Plus, FileUp, Sparkles, BrainCircuit, Network } from 'lucide-react';
 
 const MAX_FILES = 5;
 
@@ -15,7 +15,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState("Processing...");
   const [loadingProgress, setLoadingProgress] = useState(0); // 0 to 100
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'chat'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'chat'>('chat');
   const [swarmReadyTimestamp, setSwarmReadyTimestamp] = useState<number>(0);
   
   // Sidebar State
@@ -40,12 +40,9 @@ const App: React.FC = () => {
     
     try {
       // Phase 1: Dashboard Parser
-      const results = await analyzeFinancialReport(files, (idx, total, msg) => {
+      const structuralResults = await analyzeFinancialReport(files, (idx, total, msg) => {
           setLoadingStatus(msg);
           // Analysis covers 0% -> 50%
-          // idx goes from 0 to total-1
-          // We can just use raw steps: idx is completed files? No, loop index.
-          // Let's assume idx is currently processing index.
           const completedSteps = idx; 
           const percentage = Math.round((completedSteps / totalSteps) * 100);
           setLoadingProgress(percentage);
@@ -54,20 +51,11 @@ const App: React.FC = () => {
       // Update progress after phase 1 is done
       setLoadingProgress(50);
       
-      // Merge results if we already have some (deduplicating by filename)
-      setAnalysisResults(prev => {
-        if (!prev) return results;
-        const existingNames = new Set(results.map(r => r.source_file));
-        const keptPrev = prev.filter(p => !existingNames.has(p.source_file));
-        return [...keptPrev, ...results];
-      });
-
       // Phase 2: Agent Swarm Initialization
       setLoadingStatus("Briefing Research Team (Context Loading)...");
       await initializeAgentSwarm(files, (idx, total, msg) => {
         setLoadingStatus(msg);
         // Swarm Init covers 50% -> 100%
-        // Base steps = files.length
         const completedSteps = files.length + idx; 
         const percentage = Math.round((completedSteps / totalSteps) * 100);
         setLoadingProgress(Math.min(percentage, 99)); // Don't hit 100 until fully done
@@ -79,6 +67,16 @@ const App: React.FC = () => {
       // Signal that the swarm is fully ready
       setSwarmReadyTimestamp(Date.now());
       
+      // DELAYED STATE UPDATE: Only update results AFTER swarm is ready.
+      // This keeps the user on the Landing Page (which handles the loading UI) 
+      // until the entire process is finished.
+      setAnalysisResults(prev => {
+        if (!prev) return structuralResults;
+        const existingNames = new Set(structuralResults.map(r => r.source_file));
+        const keptPrev = prev.filter(p => !existingNames.has(p.source_file));
+        return [...keptPrev, ...structuralResults];
+      });
+
     } catch (error) {
       console.error("Error processing file:", error);
       alert("Failed to analyze the documents.");
@@ -132,10 +130,26 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-emerald-500/30 relative overflow-x-hidden flex flex-col">
-      {/* Ambient Background Glows */}
-      <div className="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="fixed bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="fixed top-[20%] right-[10%] w-[300px] h-[300px] bg-purple-500/5 rounded-full blur-[100px] pointer-events-none" />
+      {/* --- Ambient Background --- */}
+      
+      {/* 1. Base Grid Pattern */}
+      <div 
+        className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none"
+        style={{
+            backgroundImage: `linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)`,
+            backgroundSize: '50px 50px'
+        }}
+      />
+      
+      {/* 2. Top-Left Vibrant Glow */}
+      <div className="fixed top-[-10%] left-[-5%] w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[130px] pointer-events-none mix-blend-screen animate-pulse" style={{ animationDuration: '4s' }} />
+      
+      {/* 3. Bottom-Right Cool Glow */}
+      <div className="fixed bottom-[-10%] right-[-5%] w-[700px] h-[700px] bg-blue-600/10 rounded-full blur-[130px] pointer-events-none mix-blend-screen" />
+      
+      {/* 4. Center-Right Accent */}
+      <div className="fixed top-[30%] right-[15%] w-[400px] h-[400px] bg-indigo-500/5 rounded-full blur-[100px] pointer-events-none" />
+
 
       {/* Hidden Input for Additional Uploads */}
       <input 
@@ -149,12 +163,12 @@ const App: React.FC = () => {
 
       {/* Navbar */}
       <nav className="sticky top-4 z-50 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
-        <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl shadow-black/20 h-16 flex items-center justify-between px-6">
-          <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-tr from-emerald-400 to-emerald-600 p-1.5 rounded-lg shadow-lg shadow-emerald-500/20">
+        <div className="bg-slate-900/70 backdrop-blur-xl border border-white/5 rounded-2xl shadow-lg shadow-black/10 h-16 flex items-center justify-between px-6 transition-all hover:border-white/10">
+          <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setAnalysisResults(null)}>
+            <div className="bg-gradient-to-tr from-emerald-500 to-emerald-600 p-1.5 rounded-lg shadow-lg shadow-emerald-500/20 group-hover:shadow-emerald-500/40 transition-shadow">
                 <BrainCircuit className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold tracking-tight text-white">Deep<span className="text-emerald-400">Insight</span></span>
+            <span className="text-xl font-bold tracking-tight text-white">Jarvis</span>
           </div>
           <div className="flex items-center gap-4">
              {analysisResults && !isLoading && (
@@ -177,23 +191,24 @@ const App: React.FC = () => {
                  Add Doc {currentFileCount}/{MAX_FILES}
                </button>
              )}
-             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-slate-700/50">
+             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/40 border border-slate-700/50 hover:bg-slate-800/60 transition-colors">
                 <Sparkles className="w-3 h-3 text-purple-400" />
                 <span className="text-[10px] font-bold tracking-wider text-slate-300 uppercase">
-                   Gemini 3 Powered
+                   Gemini 3.0
                 </span>
              </div>
           </div>
         </div>
       </nav>
       
-      {/* Global Loader Overlay for Append actions */}
+      {/* Global Loader Overlay - ONLY SHOWS FOR APPEND ACTIONS (When analysisResults exists) */}
+      {/* The initial load is handled by the LandingPage component itself */}
       {isLoading && analysisResults && (
          <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-md flex items-center justify-center">
             <div className="bg-slate-900 border border-slate-700 p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm text-center relative overflow-hidden w-full mx-4">
                <div className="absolute inset-0 bg-gradient-to-tr from-emerald-500/10 via-transparent to-transparent" />
                <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-4 relative z-10" />
-               <h3 className="text-lg font-semibold text-white relative z-10 mb-2">Convening Team</h3>
+               <h3 className="text-lg font-semibold text-white relative z-10 mb-2">Expanding Research Team</h3>
                
                <div className="w-full bg-slate-800 rounded-full h-1.5 mb-4 overflow-hidden border border-slate-700/50 relative z-10">
                   <div 
@@ -216,64 +231,27 @@ const App: React.FC = () => {
 
       <main className="max-w-[95%] w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 relative z-10 flex-grow flex flex-col">
         {!analysisResults ? (
-          <div className="max-w-2xl mx-auto my-auto w-full space-y-6 sm:space-y-8 animate-in fade-in zoom-in-95 duration-700">
-            <div className="text-center space-y-4">
-              <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight">
-                Your AI-Powered <br/>
-                <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-300">Research Team</span>
-              </h1>
-              <p className="text-base sm:text-lg text-slate-400 max-w-lg mx-auto leading-relaxed">
-                Upload PDFs (research papers, contracts, or reports). We convene a <span className="text-white font-semibold">synchronized team of expert agents</span> to analyze your documents, led by a strategic Research Lead.
-              </p>
-            </div>
-            
-            {isLoading ? (
-               <div className="border border-slate-700/50 rounded-2xl p-12 text-center bg-slate-900/60 backdrop-blur-sm shadow-xl max-w-lg mx-auto w-full">
-                  <Loader2 className="w-12 h-12 text-emerald-500 animate-spin mx-auto mb-6" />
-                  <h3 className="text-xl font-semibold text-white mb-4">Initializing Research Team</h3>
-                  
-                  <div className="w-full bg-slate-800 rounded-full h-2 mb-4 overflow-hidden border border-slate-700">
-                    <div 
-                      className="bg-emerald-500 h-2 rounded-full transition-all duration-300 ease-out shadow-[0_0_10px_rgba(16,185,129,0.5)]" 
-                      style={{ width: `${loadingProgress}%` }} 
-                    />
-                  </div>
-                  
-                  <div className="flex justify-between text-xs text-slate-500 mb-2 font-mono uppercase tracking-widest">
-                    <span>Analysis Phase</span>
-                    <span>Expert Briefing</span>
-                  </div>
-                  
-                  <p className="text-slate-400 mt-2 text-sm animate-pulse">{loadingStatus}</p>
-               </div>
-            ) : (
-               <FileUploader onFileUpload={handleFileUpload} isLoading={isLoading} maxFiles={MAX_FILES} currentCount={currentFileCount} />
-            )}
-
-            {!isLoading && (
-              <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center text-sm text-slate-500 mt-8 sm:mt-12">
-                 <div className="p-3 sm:p-4 rounded-xl bg-slate-900/50 border border-slate-800/50 hover:border-slate-700 transition-colors">
-                    <strong className="block text-slate-300 mb-1 text-xs sm:text-sm">Doc Experts</strong>
-                    <span className="hidden sm:inline">Specialist per file</span>
-                    <span className="sm:hidden text-[10px]">Per File</span>
-                 </div>
-                 <div className="p-3 sm:p-4 rounded-xl bg-slate-900/50 border border-slate-800/50 hover:border-slate-700 transition-colors">
-                    <strong className="block text-slate-300 mb-1 text-xs sm:text-sm">Research Lead</strong>
-                    <span className="hidden sm:inline">Coordinates synthesis</span>
-                    <span className="sm:hidden text-[10px]">Coordinator</span>
-                 </div>
-                 <div className="p-3 sm:p-4 rounded-xl bg-slate-900/50 border border-slate-800/50 hover:border-slate-700 transition-colors">
-                    <strong className="block text-slate-300 mb-1 text-xs sm:text-sm">Peer Review</strong>
-                    <span className="hidden sm:inline">Checks for hallucination</span>
-                    <span className="sm:hidden text-[10px]">Audit</span>
-                 </div>
-              </div>
-            )}
-          </div>
+          <LandingPage 
+            onFileUpload={handleFileUpload} 
+            isLoading={isLoading} 
+            loadingProgress={loadingProgress}
+            loadingStatus={loadingStatus}
+          />
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
             <div className="flex flex-col sm:flex-row items-center justify-between border-b border-white/5 pb-1 gap-4">
                <div className="flex items-center gap-2 p-1 bg-slate-900/50 rounded-lg border border-white/5">
+                   <button 
+                      onClick={() => setActiveTab('chat')}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all rounded-md ${
+                        activeTab === 'chat' 
+                          ? 'bg-slate-800 text-emerald-400 shadow-lg shadow-black/20' 
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                      }`}
+                   >
+                      <Network className="w-4 h-4" />
+                      Agent Swarm
+                   </button>
                    <button 
                       onClick={() => setActiveTab('dashboard')}
                       className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all rounded-md ${
@@ -283,42 +261,12 @@ const App: React.FC = () => {
                       }`}
                    >
                       {isMultiView ? <Columns className="w-4 h-4" /> : <LayoutDashboard className="w-4 h-4" />}
-                      {isMultiView ? 'Deep View' : 'Document Overview'}
-                   </button>
-                   <button 
-                      onClick={() => setActiveTab('chat')}
-                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all rounded-md ${
-                        activeTab === 'chat' 
-                          ? 'bg-slate-800 text-emerald-400 shadow-lg shadow-black/20' 
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-                      }`}
-                   >
-                      <MessageSquareText className="w-4 h-4" />
-                      Team Chat
+                      Knowledge Base
                    </button>
                </div>
             </div>
 
             <div className="min-h-[600px]">
-               {/* Dashboard View */}
-               <div className={activeTab === 'dashboard' ? 'block' : 'hidden'}>
-                  {isMultiView ? (
-                     <ComparisonView 
-                        results={analysisResults} 
-                        onDelete={handleRemoveFile}
-                        onViewSource={handleViewSource} 
-                     />
-                  ) : (
-                     <div className="w-full max-w-5xl mx-auto">
-                        <Dashboard 
-                          data={analysisResults[0]} 
-                          onDelete={handleRemoveFile} 
-                          onViewSource={handleViewSource}
-                        />
-                     </div>
-                  )}
-               </div>
-
                {/* Chat View */}
                <div className={activeTab === 'chat' ? 'block' : 'hidden'}>
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
@@ -380,6 +328,25 @@ const App: React.FC = () => {
                         </div>
                      </div>
                   </div>
+               </div>
+
+               {/* Dashboard View */}
+               <div className={activeTab === 'dashboard' ? 'block' : 'hidden'}>
+                  {isMultiView ? (
+                     <ComparisonView 
+                        results={analysisResults} 
+                        onDelete={handleRemoveFile}
+                        onViewSource={handleViewSource} 
+                     />
+                  ) : (
+                     <div className="w-full max-w-5xl mx-auto">
+                        <Dashboard 
+                          data={analysisResults[0]} 
+                          onDelete={handleRemoveFile} 
+                          onViewSource={handleViewSource}
+                        />
+                     </div>
+                  )}
                </div>
             </div>
           </div>

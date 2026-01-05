@@ -6,9 +6,18 @@ interface FileUploaderProps {
   isLoading: boolean;
   maxFiles?: number;
   currentCount?: number;
+  progress?: number;
+  status?: string;
 }
 
-const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, isLoading, maxFiles = 5, currentCount = 0 }) => {
+const FileUploader: React.FC<FileUploaderProps> = ({ 
+  onFileUpload, 
+  isLoading, 
+  maxFiles = 5, 
+  currentCount = 0,
+  progress = 0,
+  status = "Processing..." 
+}) => {
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (isLoading) return;
@@ -53,7 +62,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, isLoading, ma
     <div 
       className={`border-2 border-dashed rounded-3xl p-6 sm:p-12 text-center transition-all duration-300 relative overflow-hidden group ${
         isLoading 
-        ? 'border-slate-800 opacity-50 cursor-not-allowed bg-slate-900/30' 
+        ? 'border-emerald-500/20 bg-slate-900/40 cursor-wait' 
         : 'border-slate-700/50 hover:border-emerald-500/50 hover:bg-slate-900/60 cursor-pointer hover:shadow-2xl hover:shadow-emerald-900/10'
       }`}
       onDrop={handleDrop}
@@ -70,14 +79,30 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, isLoading, ma
         onChange={handleChange}
         disabled={isLoading}
       />
-      <label htmlFor="fileInput" className="cursor-pointer flex flex-col items-center justify-center gap-6 relative z-10">
+      <label htmlFor="fileInput" className={`cursor-pointer flex flex-col items-center justify-center gap-6 relative z-10 ${isLoading ? 'pointer-events-none' : ''}`}>
         {isLoading ? (
-          <div className="flex flex-col items-center gap-4">
-            <Loader2 className="w-14 h-14 text-emerald-500 animate-spin" />
-            <div className="space-y-1">
-               <div className="text-white font-medium text-lg">Analyzing Documents...</div>
-               <div className="text-sm text-slate-500">Parsing content & preparing knowledge base</div>
+          <div className="flex flex-col items-center gap-4 w-full max-w-xs mx-auto animate-in fade-in zoom-in-95 duration-500">
+            <div className="relative">
+              <div className="absolute inset-0 bg-emerald-500/20 blur-xl rounded-full animate-pulse" />
+              <Loader2 className="w-12 h-12 text-emerald-400 animate-spin relative z-10" />
             </div>
+            
+            <div className="w-full space-y-2">
+                <div className="flex justify-between text-[10px] text-slate-400 font-mono tracking-wider uppercase">
+                   <span>Progress</span>
+                   <span>{progress}%</span>
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-700/50">
+                    <div 
+                        className="bg-emerald-500 h-full rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(16,185,129,0.5)]" 
+                        style={{ width: `${progress}%` }} 
+                    />
+                </div>
+            </div>
+            
+            <p className="text-sm text-emerald-100/80 font-medium animate-pulse text-center">
+               {status}
+            </p>
           </div>
         ) : (
           <>

@@ -1,6 +1,6 @@
-# Insight - Deep Research AI Agent Swarm
+# Jarvis - Deep Research AI Agent Swarm
 
-**Insight** is a sophisticated document analysis platform powered by the Google Gemini API. It uses a **Multi-Agent Swarm Architecture** to perform deep research on financial reports, legal contracts, and scientific papers. Unlike standard RAG (Retrieval-Augmented Generation) applications, Insight employs a team of specialized agents that plan, critique, execute, and review research tasks autonomously.
+**Jarvis** is a sophisticated document analysis platform powered by the Google Gemini API. It uses a **Multi-Agent Swarm Architecture** to perform deep research on financial reports, legal contracts, and scientific papers. Unlike standard RAG (Retrieval-Augmented Generation) applications, Jarvis employs a team of specialized agents that plan, critique, execute, and review research tasks autonomously.
 
 ---
 
@@ -66,7 +66,7 @@ When a user asks a question:
 
 6.  **Peer Review (Output Audit):**
     *   The **Review Board** reads the final synthesized report.
-    *   It checks for "Not found" lazy answers or hallucinations.
+    *   *It checks for "Not found" lazy answers or hallucinations.*
     *   *If Rejected:* The workflow loops back to planning with "Remediation Instructions".
 
 ---
