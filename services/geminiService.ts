@@ -434,10 +434,10 @@ const executiveBoardSchema: Schema = {
     verdict: { 
       type: Type.STRING, 
       enum: ["APPROVED", "REJECTED"],
-      description: "Approve if the plan is strategic and comprehensive. Reject if it is too basic or misses key aspects of the user's query."
+      description: "Approve ONLY if the plan is perfect. If improvements are needed, REJECT."
     },
-    critique_reasoning: { type: Type.STRING, description: "Explain rejection reasoning." },
-    specific_improvements: { type: Type.STRING, description: "Directives for the Lead Researcher." }
+    critique_reasoning: { type: Type.STRING, description: "Explain decision." },
+    specific_improvements: { type: Type.STRING, description: "Directives for the Lead Researcher. Must be empty if APPROVED." }
   },
   required: ["verdict", "critique_reasoning"]
 };
@@ -449,11 +449,11 @@ const outputQualitySchema: Schema = {
     verdict: { 
       type: Type.STRING, 
       enum: ["APPROVED", "REJECTED"],
-      description: "REJECT if data is missing or the synthesis is hallucinated. APPROVE if high quality."
+      description: "REJECT if data is missing, hallucinated, or if remediation is needed. APPROVE if high quality."
     },
     quality_assessment: { type: Type.STRING, description: "Review of the final output quality." },
     missing_data_suspicion: { type: Type.BOOLEAN, description: "True if the answer claims 'Not Found' but it likely exists." },
-    remediation_instructions: { type: Type.STRING, description: "How to fix the answer." }
+    remediation_instructions: { type: Type.STRING, description: "How to fix the answer. Empty if APPROVED." }
   },
   required: ["verdict", "quality_assessment", "missing_data_suspicion"]
 };
@@ -474,7 +474,8 @@ export const generateClarificationQuestions = async (
     1. If the query is vague (e.g., "summarize", "what's important", "compare them"), generate 3 to 4 distinct clarification questions.
        - Decide if each question should be SINGLE-choice (e.g. "Which specific year?") or MULTIPLE-choice (e.g. "Which departments should be included?").
        - Each question must have 3 to 5 options.
-       - Include an "Other/Custom" option where relevant.
+       - **MANDATORY**: The FIRST option for every question must be "Let Jarvis decide [context]" (e.g., "Let Jarvis identify key years", "Let Jarvis select top metrics").
+       - Include an "Other/Custom" option where relevant as the last choice (set isCustomInput=true).
     2. If the query is already very specific (e.g., "What is the revenue in 2023 for Company X?"), set requires_clarification = false.
 
     OUTPUT JSON.
@@ -661,23 +662,35 @@ async function runExecutiveBoard(userQuery: string, plan: OrchestratorPlan, avai
     PLAN: ${JSON.stringify(plan)}
     
     ROLE: Enforce strict research standards. You hate superficial work.
+
+    CRITICAL TASK REVIEW:
+    - Scrutinize the 'specific_question' assigned to each file. 
+    - Does the question make sense for that specific document? 
+    - Is the question too broad for a targeted extraction?
+    - If a task is "extract everything", REJECT it. It must be specific.
     
     AUTOMATIC REJECTION CRITERIA:
     1. **Single-Step Logic for Complex Queries**: If the user asks for a comparison or deep analysis, and the plan has only 1 step -> REJECT.
     2. **Missing Cross-Referencing**: If multiple files are available and relevant, but the plan only queries one -> REJECT.
     3. **Vague Questions**: If tasks ask "tell me about this" instead of specific questions -> REJECT.
-    4. **Shallow Strategy**: If the explanation is generic -> REJECT.
+    4. **Bad Task Assignments**: If a task asks a file for info it clearly won't have (e.g. asking a 2020 report for 2024 data), or uses a generic prompt -> REJECT.
+    5. **Shallow Strategy**: If the explanation is generic -> REJECT.
+    6. **Optimization**: If you think the plan can be improved in ANY way (e.g. adding a valuation step, checking specific risks), REJECT it.
     
     VERDICT RULES:
-    - **REJECT** if *any* criteria above are met.
-    - **APPROVE** only if the plan is detailed, multi-step, and logically sound.
+    - **REJECT** if the plan needs improvement.
+    - **APPROVE** only if the plan is perfect.
+    
+    JSON OUTPUT RULES:
+    - If verdict is "APPROVED", 'specific_improvements' MUST be an empty string.
+    - If verdict is "REJECTED", 'specific_improvements' MUST contain the instructions.
 
     Output JSON verdict.
   `;
 
   return await callGeminiWithRetry(async () => {
     const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview", 
+        model: "gemini-3-pro-preview", 
         contents: boardPrompt,
         config: {
         responseMimeType: "application/json",
@@ -709,12 +722,20 @@ export const reviewOutputWithBoard = async (
       1. **Missing Info**: Did the report fail to answer the core question?
       2. **Logic Check**: Does the conclusion follow the data?
       
+      VERDICT RULES:
+      - **REJECT** if the report is incomplete, hallucinated, or needs improvement.
+      - **APPROVE** only if the report is high quality and accurate.
+      
+      JSON OUTPUT RULES:
+      - If verdict is "APPROVED", 'remediation_instructions' MUST be empty string.
+      - If verdict is "REJECTED", 'remediation_instructions' MUST contain the fix.
+      
       Output JSON.
     `;
 
     return await callGeminiWithRetry(async () => {
         const response = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
+            model: "gemini-3-pro-preview",
             contents: auditPrompt,
             config: {
                 responseMimeType: "application/json",
